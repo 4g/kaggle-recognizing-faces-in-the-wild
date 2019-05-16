@@ -16,8 +16,10 @@ def load_data():
 
 	for family in tqdm(glob.glob(train_images_path)):
 		for members in glob.glob(family + "/*"):
-			for image in glob.glob(members + "/*.jpg"):
-				_train_images.append(cv2.imread(image))
+			for image_path in glob.glob(members + "/*.jpg"):
+				image = imglib.load_img(image_path)
+				image = imglib.img_to_array(image, dtype=np.float32)
+				_train_images.append(image)
 				label = "/".join(members.split("/")[-2:])
 				_train_labels.append(label)
 
