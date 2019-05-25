@@ -7,11 +7,12 @@ from random import sample, choice
 from itertools import product
 from keras.layers.merge import dot
 from keras.layers import Input, Dense
-from keras.models import Model
+from keras.models import Model, load_model
 from keras.optimizers import SGD
 from keras.regularizers import l2
 from itertools import  cycle
-from keras.callbacks import LearningRateScheduler
+from keras.callbacks import LearningRateScheduler, ModelCheckpoint
+from random import shuffle
 
 #### Create network #####
 
@@ -83,8 +84,8 @@ def batch_generator(indices, labels, embeddings, batch_size):
     i = 0
     for index, label in cycle(zip(indices, labels)):
         i += 1
-        # if i % 10 == 0:
-        #     continue
+        if i % 10 == 0:
+            continue
 
         i1.append(embeddings[index[0]])
         i2.append(embeddings[index[1]])
@@ -119,7 +120,22 @@ def val_generator(indices, labels, embeddings, batch_size):
         return i1, i2, l
 
 
+
+
+
 indices, labels = get_all_pairs()
+
+_ind = list(range(len(indices)))
+shuffle(_ind)
+
+
+p1size = int(len(indices)*0.9)
+
+indices_1, indices_2 = [indices[i] for i in sorted(_ind[:p1size])], [indices[i] for i in sorted(_ind[p1size:])]
+labels_1, labels_2 = [labels[i] for i in sorted(_ind[:p1size])], [labels[i] for i in sorted(_ind[p1size:])]
+
+batch_size = 128
+
 print("Num siamese pairs", len(indices))
 
 from keras_facenet import FaceNet
@@ -127,11 +143,11 @@ face_embedder = FaceNet()
 train_embeddings = face_embedder.embeddings(train_images)
 train_embeddings = normalize(train_embeddings)
 
-generator = batch_generator(indices=indices, labels=labels, embeddings=train_embeddings,
-                                    batch_size=1024)
+generator = batch_generator(indices=indices_1, labels=labels_1, embeddings=train_embeddings,
+                                    batch_size=batch_size)
 
-val = val_generator(indices=indices, labels=labels, embeddings=train_embeddings,
-                                    batch_size=1024)
+val = val_generator(indices=indices_2, labels=labels_2, embeddings=train_embeddings,
+                                    batch_size=batch_size)
 
 def lr_schedule(epoch):
     if epoch <= 30:
@@ -142,13 +158,16 @@ def lr_schedule(epoch):
     return lr
 
 lr_scheduler = LearningRateScheduler(schedule=lr_schedule, verbose=1)
+checkpoint = ModelCheckpoint(filepath="best_model.hf5", monitor='val_loss', save_best_only=True, mode='auto')
 
 model.fit_generator(generator,
-                    steps_per_epoch=824,
-                    epochs=30,
+                    steps_per_epoch=len(indices_1)//batch_size,
+                    epochs=60,
                     validation_data=val,
-                    validation_steps=100, callbacks=[lr_scheduler])
+                    validation_steps=len(indices_2)//batch_size, callbacks=[lr_scheduler, checkpoint])
 
+
+model = load_model("best_model.hf5")
 
 test_labels_indices = {l: i for i, l in enumerate(test_labels)}
 distances = []
